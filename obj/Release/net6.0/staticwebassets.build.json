@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "KZMAJRP0xXDVVzN2o8ZkFgLiY4vxTz+6Amn7VGTf0so=",
+  "Source": "juliWebApi",
+  "BasePath": "_content/juliWebApi",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

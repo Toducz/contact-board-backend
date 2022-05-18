@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress 
+metadata:
+  namespace: toducze-test
+  name: minimal-ingress
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: te-dotnet-restapi.cs-test-kube.codespring.ro 
+    http:
+      paths:
+      - pathType: Prefix 
+        path: /
+        backend:
+          service:
+            name: rest-api-dotnet-service 
+            port:
+              number: 80
+     

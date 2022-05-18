@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: toducze-test
+  name: rest-api-dotnet-deployment 
+  labels:
+    app: rest-api-dotnet-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rest-api-dotnet
+  template:
+    metadata:
+      labels:
+        app: rest-api-dotnet
+    spec:
+      containers:
+      - name: rest-api-dotnet
+        image: d.codespring.ro/toducz.endre/kubernetes/rest-api2
+        imagePullPolicy: "Always"
+        ports:
+        - containerPort: 80
+          protocol: TCP
+          name: http
+        env:
+          - name: CONNECTIONSTRING__DEFAULTCONNECTION
+            value: "Server=postgres;Port=5432;Database=postgresdb;User Id=postgresadmin;Password=admin123"
+      imagePullSecrets:
+        - name: regcred
