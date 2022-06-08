@@ -7,7 +7,7 @@ using juliWebApi.entity;
 
 namespace juliWebApi.auth
 {
-    public class ApplicationDbContext : IdentityDbContext<MyIdentityUser>
+    public class ApplicationDbContext : IdentityDbContext<IdentityUser>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
@@ -16,21 +16,42 @@ namespace juliWebApi.auth
         {
             base.OnModelCreating(builder);
 
-            builder.Entity<TableRatings>()
-                .HasMany(tr => tr.Ratings)
-                .WithOne(r => r.TableRatings);
+            builder.Entity<Table>()
+                .HasMany(t => t.SharedWith)
+                .WithMany(u => u.SharedWith);
+                //.OnDelete(DeleteBehavior.Cascade);
+    
+
+            builder.Entity<Table>()
+                .HasMany(t => t.Ratings)
+                .WithOne(u => u.Table);
+                //.OnDelete(DeleteBehavior.Cascade);
+                
+
+            builder.Entity<User>()
+                .HasMany<Table>()
+                .WithOne(t => t.UserOwner);
+                
+            builder.Entity<Table>()
+                .HasMany<User>()
+                .WithOne(u => u.Table);
+
+            builder.Entity<User>()
+                .HasMany<Rating>()
+                .WithOne( r => r.User)
+                .HasForeignKey( r => r.UserForeignKey);
+
+            builder.Entity<User>()
+                .HasOne<IdentityUser>()
+                .WithOne()
+                .HasForeignKey<User>(u => u.UserId );
+
         }
-        
+
         public DbSet<Table> Tables => Set<Table>();
 
-        public DbSet<Rating> Ratings => Set<Rating>();
+        public DbSet<User> Users => Set<User>();
 
-        public DbSet<TableRatings> TableRatings => Set<TableRatings>();
-
-        public DbSet<TableUsers> TableUsers => Set<TableUsers>();
-
-        public DbSet<Invitation> Invitations => Set<Invitation>();
-
-        public DbSet<DefaultTable> DefaultTables => Set<DefaultTable>();
+        //public DbSet<Rating> Ratings => Set<Rating>();
     }
 }

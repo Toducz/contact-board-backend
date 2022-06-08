@@ -10,11 +10,18 @@ namespace juliWebApi.model
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         [IgnoreDataMember]
-        public int? Id { get; set; } 
+        public int? Id { get; set; }
         public string? TableName { get; set; }
+        public string? Description {get; set;}
+        public DateTime CreateDate { get; set; }
+        public User? UserOwner { get; set; }    
+        public Boolean isDeleted{get; set;} = false;
 
-        public string? UserEmailOwner { get; set; }
 
-        public string? Descriptions {get; set;}
+        public virtual List<User> SharedWith { get; set; } = new List<User>();
+        
+
+        public virtual List<Rating> Ratings {get; set;} = new List<Rating>();
+  
     }
 }

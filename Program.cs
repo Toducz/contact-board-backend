@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using juliWebApi.model;
-
+using juliWebApi.auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,21 +31,22 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 
 //For Identity
-builder.Services.AddIdentity<MyIdentityUser, IdentityRole>()
+builder.Services.AddIdentity<IdentityUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
 
-builder.Services.Configure<IdentityOptions>(opts => {
-        opts.User.RequireUniqueEmail = true;
-        opts.User.AllowedUserNameCharacters =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
-        opts.Password.RequiredLength = 8;
-        opts.Password.RequireNonAlphanumeric = true;
-        opts.Password.RequireLowercase = false;
-        opts.Password.RequireUppercase = true;
-        opts.Password.RequireDigit = true;
-    });
+builder.Services.Configure<IdentityOptions>(opts =>
+{
+    opts.User.RequireUniqueEmail = true;
+    opts.User.AllowedUserNameCharacters =
+"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
+    opts.Password.RequiredLength = 4;
+    opts.Password.RequireNonAlphanumeric = false;
+    opts.Password.RequireLowercase = false;
+    opts.Password.RequireUppercase = false;
+    opts.Password.RequireDigit = false;
+});
 
 
 //Adding Authentication
@@ -89,11 +90,11 @@ builder.Services.AddCors(o => o.AddPolicy("MyPolicy", builder =>
         {
             builder.AllowAnyOrigin()
                    .AllowAnyMethod()
-                   .AllowAnyHeader()
-                   .WithMethods("GET","PUT","DELETE","POST","PATCH");
-                   
+                   .AllowAnyHeader();
+            //.WithMethods("GET","PUT","DELETE","POST","PATCH");
+
         }));
-        
+
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -105,7 +106,7 @@ using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
 
-    var context = services.GetRequiredService<ApplicationDbContext>();    
+    var context = services.GetRequiredService<ApplicationDbContext>();
     context.Database.Migrate();
 }
 
@@ -128,3 +129,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+

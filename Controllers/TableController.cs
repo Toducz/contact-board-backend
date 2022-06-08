@@ -4,9 +4,14 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Linq;
+using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
 using juliWebApi.model;
 using Microsoft.AspNetCore.Authorization;
 using juliWebApi.auth;
+using System.ComponentModel.DataAnnotations;
+using juliWebApi.Request;
 
 /*
     public int? Id { get; set; }  -- general automaticaly
@@ -14,12 +19,51 @@ using juliWebApi.auth;
     public string? UserIdOwner { get; set; }
 */
 
+public class RequestAddRating
+{
+    [Required(ErrorMessage = "required UserOwner")]
+    public string UserOwnerEmail{ get; set; }
+
+    
+    [Required(ErrorMessage = "required tableId")]
+    public int tableId { get; set; }
+
+    [Required(ErrorMessage = "required rating")]
+    public Rating Rating { get; set; }
+}
+
+public class RequestAddTable
+{
+
+    [Required(ErrorMessage = "required TableName")]
+    public string TableName { get; set; }
+
+    [Required(ErrorMessage = "required Description")]
+    public string? Description { get; set; }
+
+    [Required(ErrorMessage = "required CreateDate")]
+    public DateTime CreateDate { get; set; }
+
+    [Required(ErrorMessage = "required UserOwner")]
+    public string UserOwnerEmail { get; set; }
+
+    public List<string> SharedWithEmails { get; set; }
+
+}
+
+public class ResponseUsersName{
+    public string? lastName {get; set;}
+    public string? userEmail {get; set;}
+}
+
+
+
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/[controller]/[action]")]
 public class TableController : ControllerBase
 {
 
-    private readonly UserManager<MyIdentityUser> _userManager;
+    private readonly UserManager<IdentityUser> _userManager;
 
     private readonly ILogger<TableController> _logger;
 
@@ -27,7 +71,7 @@ public class TableController : ControllerBase
 
     public TableController(
         ILogger<TableController> logger,
-        UserManager<MyIdentityUser> userManager,
+        UserManager<IdentityUser> userManager,
         ApplicationDbContext dbContext)
     {
         _logger = logger;
@@ -35,110 +79,243 @@ public class TableController : ControllerBase
         _dbContext = dbContext;
     }
 
-    
-    [HttpGet]
-    public List<Table> Get(string userEmail)
-    {  
-        var myTableId = _dbContext.TableUsers
-            .Where(x => x.UserEmail == userEmail)
-            .Select(x => x.TableId)
-            .Distinct() 
-            .ToList();
-        
-        Console.WriteLine("*");
-        Console.WriteLine(myTableId.Count());
-        Console.WriteLine("*");
-
-        var result = _dbContext.Tables
-            .Where(x => myTableId.Contains(x.Id))
-            .ToList();
-        
-        return result;
-    }
-
     [HttpPost]
-
-    public async Task<ActionResult<Table>> Post(NewTableRequest newTableRequest)
+    public async Task<ActionResult<Table>> AddRating(RequestAddRating requestAddRating)
     {
-        var userOwner = await _userManager.FindByEmailAsync(newTableRequest.UserEmailOwner);
-        
-        if(userOwner is null)
+
+        var table = await _dbContext.Tables.FindAsync(requestAddRating.tableId);
+
+        if (table == null)
         {
-            return StatusCode(StatusCodes.Status400BadRequest, new Response { Status = "Error", Message = "Your email not valid!" });
+            return StatusCode(404, new Response { Status="Error", Message="Table is not found!"});
         }
 
-        var userInvited = await _userManager.FindByEmailAsync(newTableRequest.InvitedPersonEmail);
-        
-        if(userInvited is null)
+        var userOwner = await _dbContext.Users.FindAsync(requestAddRating.UserOwnerEmail);;
+
+        if (userOwner == null)
         {
-            return StatusCode(StatusCodes.Status400BadRequest, new Response { Status = "Error", Message = "Email not exist!" });
+            return StatusCode(404, "User is not found!");
         }
 
-        var existingTablename = _dbContext.Tables
-            .Where( x => x.UserEmailOwner == newTableRequest.UserEmailOwner)
-            .Where(x => x.TableName == newTableRequest.TableName)
-            .FirstOrDefault();
+        var rating = new Rating{
+            Description = requestAddRating.Rating.Description,
+            CreationDate = requestAddRating.Rating.CreationDate,
+            RatingValue = requestAddRating.Rating.RatingValue,
+            User = userOwner
+        };
 
-        if(existingTablename is not null){
-            return StatusCode(StatusCodes.Status400BadRequest, new Response { Status = "Error", Message = "Tablename already exist!" });
+        try
+        {
+            table.Ratings.Add(rating);
+            await _dbContext.SaveChangesAsync();
         }
-
-        var table = new Table{
-            TableName = newTableRequest.TableName,
-            UserEmailOwner = newTableRequest.UserEmailOwner,
-            Descriptions = newTableRequest.Description
-        };
-
-        await _dbContext.Tables.AddAsync(table);
-        await _dbContext.SaveChangesAsync();
-
-
-        var tableUsers = new TableUsers{
-            UserEmail = newTableRequest.UserEmailOwner,
-            TableId = table.Id
-        };
-
-        await _dbContext.TableUsers.AddAsync(tableUsers);
-
-
-        var invitation = new Invitation{
-            SentInvitationEmail = newTableRequest.UserEmailOwner,
-            InvitedPersonEmail = newTableRequest.InvitedPersonEmail,
-            TableId = table.Id,
-            Confirmed = false
-        };
-
-        await _dbContext.Invitations.AddAsync(invitation);
-        await _dbContext.SaveChangesAsync();
+        catch (Exception ex)
+        {
+            return StatusCode(500, "Internal server error");
+        }
 
         return table;
     }
 
-    [HttpDelete]
-    public async Task<ActionResult<Table>> Delete(int id)
+    [HttpPost]
+    public async Task<ActionResult<Table>> AddTable(RequestAddTable requestAddTable)
     {
-        try
-        {
-            var table =  await _dbContext.Tables.FindAsync(id);
+        Console.WriteLine("--8--");
+        Console.WriteLine(requestAddTable.CreateDate);
+        Console.WriteLine("--8--");
 
-            if (table == null)
+        //var userOwner = await _userManager.FindByEmailAsync(requestAddTable.UserOwnerEmail);
+        var userOwner = await _dbContext.Users.FindAsync(requestAddTable.UserOwnerEmail);
+
+        if (userOwner == null)
+        {
+            return StatusCode(404, "User owner not exist!");
+        }
+
+        List<User> sharedWith = new List<User>();
+
+        if (requestAddTable.SharedWithEmails is not null)
+        {
+            foreach (var sharedWithEmail in requestAddTable.SharedWithEmails)
             {
-                return NotFound($"Table with Id = {id} not found");
+                var sharedUser = await _dbContext.Users.FindAsync(sharedWithEmail);
+
+                if(sharedUser is null){
+                    return StatusCode(404, new Response { Status="Error", Message = "Invited person's email not exist!" } );
+                }
+
+                if(sharedUser.Email == requestAddTable.UserOwnerEmail){
+                    return StatusCode(404, new Response { Status="Error", Message =  "You cannot invite yourself!" }); 
+                }
+
+                sharedWith.Add(sharedUser);
             }
+        }
+        
 
-            _dbContext.Tables.Remove(table);
+        var table = new Table{
+            TableName = requestAddTable.TableName,
+            Description = requestAddTable.Description,
+            CreateDate = requestAddTable.CreateDate,
+            UserOwner = userOwner,
+            SharedWith = sharedWith,
+            isDeleted = false
+        };
 
+        try{
+            _dbContext.Tables.Add(table);
             await _dbContext.SaveChangesAsync();
-
-            return Ok(table);
-        }
-        catch (Exception)
-        {
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                "Error deleting data");
+        }catch(Exception ex){
+            Console.WriteLine(ex.Message);
+            return StatusCode(500, $"Some internal server error! {ex.Message}" );
         }
 
-        // ki kell torolni a tableUsersbol es a ratingseket is ami hozza tartozik
+        return table;
     }
 
+    [HttpGet]
+
+
+    public async Task<ActionResult<Table>> GetTable(int TableId){
+
+        var table = await _dbContext.Tables
+            .Include(t => t.Ratings)
+            .Include(t => t.SharedWith)
+            .Include(t => t.UserOwner)
+            .Where( t => t.isDeleted == false)
+            .Where(t => t.Id == TableId)
+            .FirstOrDefaultAsync();
+
+        
+        if(table is null){
+            return NotFound();
+        }
+        
+        return table;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<List<Table>>> GetMyTable(string UserEmail){
+
+        
+        //var userOwner = await _userManager.FindByEmailAsync(UserEmail);
+        var userOwner = await _dbContext.Users.FindAsync(UserEmail);
+
+        if (userOwner == null)
+        {
+            return StatusCode(404, "User owner not exist!");
+        }
+
+
+        try{
+            var result = await _dbContext.Tables
+            .Where( 
+                t => t.UserOwner.Email == UserEmail ||
+                t.SharedWith.Contains(userOwner)
+            )
+            .Where(t => t.isDeleted == false)
+            .Include(t => t.SharedWith)
+            .Include(t => t.Ratings)
+            .Include(t => t.UserOwner)
+            .ToListAsync();
+
+            return result;
+        }catch(Exception ex){
+             return StatusCode(500, $"Some internal server error! {ex.Message}" ); 
+        }
+    }
+
+    [HttpDelete]
+    public async Task<ActionResult> DeleteTable(int TableId){
+        
+        var table = await _dbContext.Tables.FindAsync(TableId);
+
+        if (table == null)
+        {
+            return StatusCode(404, "TableId is not found!");
+        }
+
+        table.isDeleted = true;
+
+        try{
+            await _dbContext.SaveChangesAsync();
+        }catch(Exception ex){
+            return StatusCode(500, $"Some internal server error! {ex.Message}");
+        }
+
+        return Ok();
+    }
+
+
+    [HttpPost]
+
+    public async Task<ActionResult> SetDefaultTable( RequestSetDefaultTable request){
+
+        var table = await _dbContext.Tables.FindAsync(request.TableId);
+
+        if (table == null)
+        {
+            return StatusCode(404, new Response { Status="Erorr", Message="Table is not found!" });
+        }
+
+        var user = await _dbContext.Users.FindAsync(request.UserEmail);
+
+        if (user == null)
+        {
+            return StatusCode(404, new Response { Status="Erorr", Message="User owner not exist!" });
+        }
+
+
+        user.Table = table;
+
+        try{
+            await _dbContext.SaveChangesAsync();
+        }catch(Exception ex){
+            return StatusCode(500, new Response { Status="Error", Message="Some internal server error"});
+        }
+
+        return Ok();
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<Table>> GetDefaultTable( string UserEmail){
+
+        var user = await _dbContext.Users
+            .Where( u => u.Email == UserEmail)
+            .Include( u => u.Table)
+            .Include( u => u.Table.Ratings)
+            .Include( u => u.Table.SharedWith)
+            .Include( u => u.Table.UserOwner)
+            .FirstOrDefaultAsync();
+
+        if (user == null)
+        {
+            return StatusCode(404, new Response { Status="Erorr", Message="User owner not exist!" });
+        }
+
+        if (user.Table == null){
+            return StatusCode(404, new Response { Status="Erorr", Message="No default table!" });
+        }
+
+        return user.Table;
+    }
+
+
+    [HttpPost]
+    public async Task<ActionResult<List<ResponseUsersName>>> getUsers( String[] usersId){
+
+        
+        var response = await this._dbContext.Users
+            .Where(u => usersId.Contains(u.Email))
+            .Select(  u => new ResponseUsersName{
+                lastName = u.LastName,
+                userEmail = u.Email
+            })
+            .ToListAsync();
+
+        return response;
+    }
+
+
+    
 }

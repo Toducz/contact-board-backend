@@ -5,6 +5,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using juliWebApi.model;
+using juliWebApi.auth;
 
 namespace juliWebApi.Controllers
 {
@@ -12,18 +13,22 @@ namespace juliWebApi.Controllers
     [ApiController]
     public class AuthenticateController : ControllerBase
     {
-        private readonly UserManager<MyIdentityUser> _userManager;
+        private readonly UserManager<IdentityUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IConfiguration _configuration;
 
+        private readonly ApplicationDbContext _dbContext;
+
         public AuthenticateController(
-            UserManager<MyIdentityUser> userManager,
+            UserManager<IdentityUser> userManager,
             RoleManager<IdentityRole> roleManager,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ApplicationDbContext dbContext)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _configuration = configuration;
+            _dbContext = dbContext;
         }
 
         [HttpPost]
@@ -49,8 +54,8 @@ namespace juliWebApi.Controllers
 
                 LoginResponse loginResponse = new LoginResponse
                 {
-                    firstName = user.firstName,
-                    lastName = user.lastName,
+                   // firstName = user.firstName,
+                   // lastName = user.lastName,
                     email = user.Email,
                     roles = userRoles,
                     token = tokenStr
@@ -76,26 +81,36 @@ namespace juliWebApi.Controllers
             if (userExists != null)
                 return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User already exists!" });
 
-            MyIdentityUser user = new()
+            IdentityUser identity = new()
             {
                 Email = model.Email,
                 SecurityStamp = Guid.NewGuid().ToString(),
-                firstName = model.FirstName,
-                lastName = model.LastName,
+                //firstName = model.FirstName,
+                //lastName = model.LastName,
                 UserName = Guid.NewGuid().ToString().ToLower() // maskepp nem engedi
             };
-            var result = await _userManager.CreateAsync(user, model.Password);
+            var result = await _userManager.CreateAsync(identity, model.Password);
 
             if (!result.Succeeded)
-                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "Something went wrong" });
 
 
             if (await _roleManager.RoleExistsAsync(UserRoles.User))
             {
-                await _userManager.AddToRoleAsync(user, UserRoles.User);
+                await _userManager.AddToRoleAsync(identity, UserRoles.User);
             }
 
+            User user = new User{
+                LastName = model.LastName,
+                FirstName = model.FirstName,
+                Email = model.Email,
+                UserId = identity.Id
+            };
 
+
+            this._dbContext.Users.Add(user);
+            await this._dbContext.SaveChangesAsync();
+            
             return Ok(new Response { Status = "Success", Message = "User created successfully!" });
         }
         /*
